@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combine PDF Dealer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Animasi progress bar bergaya indeterminate mirip Tkinter */
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+        .progress-bar-animated {
+            animation: loading 1.5s infinite linear;
+            width: 50%;
+        }
+    </style>
+</head>
+<body class="bg-[#F3F5F9] font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-[#0F2A4A] w-full px-6 py-4 shrink-0">
+        <h1 class="text-white text-[22px] font-bold tracking-wide">Combine PDF Dealer</h1>
+        <p class="text-[#B8C7DD] text-[13px] mt-0.5">Gabungkan Invoice → Report → Email → Sirkuler untuk setiap dealer</p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-6 space-y-4">
+        
+        <!-- Kartu 1: Folder Selection -->
+        <div class="bg-white border border-[#D9DEE7] px-4 py-4 shadow-sm">
+            <label class="block text-[#1F2937] font-bold text-[13px] mb-2">Folder berisi PDF</label>
+            <div class="flex">
+                <input type="text" id="folderPathDisplay" readonly placeholder="Belum ada folder yang dipilih..." class="flex-1 border border-[#D9DEE7] bg-white text-[#1F2937] text-[13px] px-3 py-1.5 focus:outline-none focus:border-[#1F6FEB]">
+                <button type="button" onclick="document.getElementById('folderInput').click()" class="ml-2 bg-[#E5E9F0] hover:bg-[#D5DBE5] text-[#1F2937] px-4 py-1.5 text-[13px] transition-colors">
+                    Pilih Folder...
+                </button>
+                <!-- Input file tersembunyi, webkitdirectory untuk memilih folder -->
+                <input type="file" id="folderInput" name="files[]" multiple webkitdirectory directory class="hidden">
+            </div>
+        </div>
+
+        <!-- Kartu 2: Action Buttons -->
+        <div class="flex items-center space-x-2">
+            <button type="button" id="btnProses" class="bg-[#1F6FEB] hover:bg-[#1A5FCC] text-white font-bold text-[13px] px-6 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                PROSES GABUNG
+            </button>
+            <button type="button" disabled class="bg-[#E5E9F0] text-[#9CA3AF] text-[13px] px-4 py-2 cursor-not-allowed">
+                Buka Folder Hasil
+            </button>
+            <button type="button" class="bg-[#E5E9F0] hover:bg-[#D5DBE5] text-[#1F2937] text-[13px] px-4 py-2 transition-colors">
+                Cek Invoice
+            </button>
+            <button type="button" id="btnBersihkan" class="bg-[#E5E9F0] hover:bg-[#D5DBE5] text-[#1F2937] text-[13px] px-4 py-2 transition-colors">
+                Bersihkan
+            </button>
+        </div>
+
+        <!-- Checkbox -->
+        <div class="flex items-center mt-2">
+            <input type="checkbox" id="abaikanCek" checked class="w-4 h-4 text-[#1F6FEB] border-gray-300 rounded focus:ring-[#1F6FEB] cursor-pointer">
+            <label for="abaikanCek" class="ml-2 text-[13px] text-[#1F2937] cursor-pointer">Abaikan cek invoice saat menggabung</label>
+        </div>
+
+        <!-- Kartu 3: Angka Statistik -->
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-[#E6F4EA] px-5 py-3 border border-[#E6F4EA]">
+                <div id="statOk" class="text-[#1E8E3E] text-[28px] font-bold leading-none mb-1">–</div>
+                <div class="text-[#1E8E3E] text-[13px] font-bold">Berhasil digabung</div>
+            </div>
+            <div class="bg-[#FCE8E6] px-5 py-3 border border-[#FCE8E6]">
+                <div id="statSkip" class="text-[#D93025] text-[28px] font-bold leading-none mb-1">–</div>
+                <div class="text-[#D93025] text-[13px] font-bold">Dilewati</div>
+            </div>
+        </div>
+
+        <!-- Status & Progress -->
+        <div>
+            <div id="statusText" class="text-[#6B7280] text-[13px] mb-1">Siap. Pilih folder lalu klik PROSES GABUNG.</div>
+            <div class="w-full bg-[#E5E9F0] h-[6px] overflow-hidden">
+                <div id="progressBar" class="bg-[#1F6FEB] h-full w-0"></div>
+            </div>
+        </div>
+
+        <!-- Kartu 4: Rincian Proses (Log) -->
+        <div class="bg-white border border-[#D9DEE7] px-4 py-3 shadow-sm flex flex-col flex-1 min-h-[250px]">
+            <label class="block text-[#1F2937] font-bold text-[13px] mb-2">Rincian proses</label>
+            <div id="logConsole" class="flex-1 bg-white border border-gray-200 overflow-y-auto p-2 font-mono text-[13px] text-[#1F2937] whitespace-pre-wrap"></div>
+        </div>
+
+    </main>
+
+    <!-- JavaScript Interaksi UI -->
+    <script>
+        const folderInput = document.getElementById('folderInput');
+        const folderPathDisplay = document.getElementById('folderPathDisplay');
+        const btnProses = document.getElementById('btnProses');
+        const btnBersihkan = document.getElementById('btnBersihkan');
+        const statusText = document.getElementById('statusText');
+        const progressBar = document.getElementById('progressBar');
+        const logConsole = document.getElementById('logConsole');
+        const statOk = document.getElementById('statOk');
+        const statSkip = document.getElementById('statSkip');
+
+        // Fungsi menulis log ke layar
+        function addLog(text, type = 'info') {
+            const span = document.createElement('span');
+            span.textContent = text + '\n';
+            if (type === 'head') span.className = 'text-[#1F6FEB] font-bold';
+            else if (type === 'ok') span.className = 'text-[#1E8E3E]';
+            else if (type === 'skip' || type === 'error') span.className = 'text-[#D93025]';
+            else if (type === 'warn') span.className = 'text-[#B45309]';
+            else span.className = 'text-[#1F2937]';
+            
+            logConsole.appendChild(span);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Ketika pengguna memilih folder
+        folderInput.addEventListener('change', function(e) {
+            if (this.files.length > 0) {
+                // Tampilkan nama folder pertama sebagai referensi
+                const path = this.files[0].webkitRelativePath;
+                const folderName = path.split('/')[0];
+                folderPathDisplay.value = "[Web Mode] Folder terpilih: " + folderName + " (" + this.files.length + " file PDF)";
+                addLog("Folder terpilih dengan " + this.files.length + " file. Siap diproses.", "info");
+            }
+        });
+
+        // Tombol Bersihkan
+        btnBersihkan.addEventListener('click', () => {
+            logConsole.innerHTML = '';
+            folderInput.value = '';
+            folderPathDisplay.value = '';
+            statOk.textContent = '–';
+            statSkip.textContent = '–';
+            statusText.textContent = 'Siap. Pilih folder lalu klik PROSES GABUNG.';
+            statusText.className = 'text-[#6B7280] text-[13px] mb-1';
+        });
+
+        // Tombol Proses
+        btnProses.addEventListener('click', async () => {
+            if (folderInput.files.length === 0) {
+                alert('Pilih folder yang berisi PDF terlebih dahulu.');
+                return;
+            }
+
+            // UI State: Loading
+            btnProses.disabled = true;
+            statusText.textContent = 'Sedang memproses dan mengunggah ke server...';
+            statusText.className = 'text-[#6B7280] text-[13px] mb-1';
+            progressBar.classList.add('progress-bar-animated');
+            logConsole.innerHTML = '';
+            statOk.textContent = '–';
+            statSkip.textContent = '–';
+            addLog("Memulai proses kompilasi via Vercel...", "head");
+
+            // Siapkan file untuk dikirim
+            const formData = new FormData();
+            for (let i = 0; i < folderInput.files.length; i++) {
+                if(folderInput.files[i].name.toLowerCase().endsWith('.pdf')) {
+                    formData.append('files[]', folderInput.files[i]);
+                }
+            }
+
+            try {
+                // Panggil API Vercel (Flask)
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    addLog("\n[OK] Proses selesai! Mengunduh file ZIP hasil compile...", "ok");
+                    statusText.textContent = 'Selesai: File berhasil digabung dan diunduh.';
+                    statusText.className = 'text-[#1E8E3E] text-[13px] mb-1';
+                    statOk.textContent = '✓'; 
+                    
+                    // Trigger download ZIP otomatis
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'Hasil_Compile_PDF.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    const errData = await response.json();
+                    addLog("\n[ERROR] " + errData.error, "error");
+                    statusText.textContent = 'Gagal diproses.';
+                    statusText.className = 'text-[#D93025] text-[13px] mb-1';
+                    statSkip.textContent = '✕';
+                }
+            } catch (error) {
+                addLog("\n[ERROR] Koneksi ke server gagal: " + error.message, "error");
+                statusText.textContent = 'Gagal terhubung ke server.';
+                statusText.className = 'text-[#D93025] text-[13px] mb-1';
+            } finally {
+                btnProses.disabled = false;
+                progressBar.classList.remove('progress-bar-animated');
+            }
+        });
+    </script>
+</body>
+</html>
